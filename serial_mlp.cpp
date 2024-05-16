@@ -1,70 +1,13 @@
-#include <stdlib.h>
-#include <cassert>
-
 #include <iostream>
 #include <fstream>
 
 #include <cblas.h>
 
-#include <vector>
-#include <algorithm>
-#include <random>
-
 #include <chrono>
 using namespace std::chrono;
 
-#include "utilities.h"
 #include "activations.h"
-
-typedef double (*fun_t)(double);
-
-typedef struct mlp
-{
-    int num_layers;
-    int *layer_sizes;
-
-    double **weights;
-    double **biases;
-
-    fun_t *activations;
-    fun_t *d_activations;
-
-    double **layers;
-    double **deltas;
-} mlp_t;
-
-mlp_t *create_mlp(int num_layers, int *layers, fun_t *activations, fun_t *d_activations)
-{
-    mlp_t *mlp = (mlp_t *)malloc(sizeof(mlp_t));
-
-    mlp->num_layers = num_layers;
-    mlp->layer_sizes = (int *)malloc(num_layers * sizeof(int));
-
-    mlp->weights = (double **)malloc((num_layers - 1) * sizeof(double *));
-    mlp->biases = (double **)malloc((num_layers - 1) * sizeof(double *));
-
-    mlp->activations = activations;
-    mlp->d_activations = d_activations;
-
-    mlp->layers = (double **)malloc(num_layers * sizeof(double *));
-    mlp->deltas = (double **)malloc(num_layers * sizeof(double *));
-
-    for (int i = 0; i < num_layers; i++)
-    {
-        mlp->layer_sizes[i] = layers[i];
-
-        if (i < num_layers - 1)
-        {
-            mlp->weights[i] = rand_vector(layers[i + 1] * layers[i]);
-            mlp->biases[i] = rand_vector(layers[i + 1]);
-        }
-
-        mlp->layers[i] = (double *)aligned_alloc(64, layers[i] * sizeof(double));
-        mlp->deltas[i] = (double *)aligned_alloc(64, layers[i] * sizeof(double));
-    }
-
-    return mlp;
-}
+#include "common.h"
 
 void mlp_forward(mlp_t *mlp, double *x)
 {
@@ -95,7 +38,7 @@ void mlp_backprop(mlp_t *mlp, double *y, double alpha)
         // We overwrite our previous output with the derivative of activation applied to it
         std::transform(mlp->layers[i + 1], mlp->layers[i + 1] + mlp->layer_sizes[i + 1], mlp->layers[i + 1], mlp->d_activations[i]);
         // delta_{i + 1} = delta_{i + 1} * d_activation(h_{i + 1})
-        hadamard(mlp->deltas[i + 1], mlp->layers[i + 1], mlp->deltas[i + 1], mlp->layer_sizes[i + 1]);
+        hadamard_product(mlp->deltas[i + 1], mlp->layers[i + 1], mlp->deltas[i + 1], mlp->layer_sizes[i + 1]);
 
         // W_i -= alpha * delta_{i + 1} h_i^T
         cblas_dger(CblasColMajor, mlp->layer_sizes[i + 1], mlp->layer_sizes[i], -1.0 * alpha, mlp->deltas[i + 1], 1, mlp->layers[i], 1, mlp->weights[i], mlp->layer_sizes[i + 1]);
@@ -106,61 +49,6 @@ void mlp_backprop(mlp_t *mlp, double *y, double alpha)
         // delta_{i} = W_i^T delta_{i + 1}
         cblas_dgemv(CblasColMajor, CblasTrans, mlp->layer_sizes[i + 1], mlp->layer_sizes[i], 1.0, mlp->weights[i], mlp->layer_sizes[i + 1], mlp->deltas[i + 1], 1, 0.0, mlp->deltas[i], 1);
     }
-}
-
-void delete_mlp(mlp_t *mlp)
-{
-    free(mlp->layer_sizes);
-
-    for (int i = 0; i < mlp->num_layers; i++)
-    {
-        if (i < mlp->num_layers - 1)
-        {
-            free(mlp->weights[i]);
-            free(mlp->biases[i]);
-        }
-
-        free(mlp->layers[i]);
-        free(mlp->deltas[i]);
-    }
-
-    free(mlp->weights);
-    free(mlp->biases);
-
-    free(mlp->layers);
-    free(mlp->deltas);
-
-    free(mlp);
-}
-
-void print_mlp(mlp_t *mlp)
-{
-    fprintf(stderr, "Input:\n");
-    print_vector(mlp->layers[0], mlp->layer_sizes[0]);
-
-    for (int i = 1; i < mlp->num_layers - 1; i++)
-    {
-        fprintf(stderr, "Hidden %d:\n", i);
-        print_vector(mlp->layers[i], mlp->layer_sizes[i]);
-    }
-
-    fprintf(stderr, "Output:\n");
-    print_vector(mlp->layers[mlp->num_layers - 1], mlp->layer_sizes[mlp->num_layers - 1]);
-
-    for (int i = 0; i < mlp->num_layers - 1; i++)
-    {
-        fprintf(stderr, "Weights %d:\n", i);
-        print_matrix(mlp->weights[i], mlp->layer_sizes[i + 1], mlp->layer_sizes[i]);
-
-        fprintf(stderr, "Biases %d:\n", i);
-        print_vector(mlp->biases[i], mlp->layer_sizes[i + 1]);
-
-        fprintf(stderr, "Deltas %d:\n", i);
-        print_vector(mlp->deltas[i], mlp->layer_sizes[i]);
-    }
-
-    fprintf(stderr, "Final Delta:\n");
-    print_vector(mlp->deltas[mlp->num_layers - 1], mlp->layer_sizes[mlp->num_layers - 1]);
 }
 
 int main()
