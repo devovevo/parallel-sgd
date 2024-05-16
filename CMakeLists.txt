@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED YES)
 
 find_package(MPI REQUIRED)
 find_package(BLAS REQUIRED)
+find_package(UPCXX REQUIRED)
 
 # netID
 # We require the GNU compiler for this assignment.
@@ -22,3 +23,6 @@ target_link_libraries(serial PRIVATE ${BLAS_LIBRARIES})
 
 add_executable(all_reduce sync_param_mlp.cpp common.cpp common.hpp activations.h data.cpp data.hpp)
 target_link_libraries(all_reduce PRIVATE MPI::MPI_CXX ${BLAS_LIBRARIES})
+
+add_executable(async_pm async_mlp.cpp common.cpp common.hpp activations.h data.cpp data.hpp)
+target_link_libraries(async_pm PRIVATE UPCXX::upcxx ${BLAS_LIBRARIES})

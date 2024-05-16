@@ -88,7 +88,7 @@ int main(int argc, char** argv)
 
     double* x = new double[NUM_SAMPLES];
     double* y = new double[NUM_SAMPLES];
-    read_data(x, y);
+    read_data(x, y, NUM_SAMPLES);
 
     double seconds = 0.0;
     double** ws = (double**) malloc(sizeof(double*) * mlp->num_layers - 2);

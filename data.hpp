@@ -4,4 +4,4 @@
 
 const int NUM_SAMPLES = 1000000;
 
-void read_data(double *x, double *y);
+void read_data(double *x, double *y, int size);

@@ -61,7 +61,7 @@ int main()
     std::normal_distribution<double> dist(0, 1);*/
     double *x = new double[NUM_SAMPLES];
     double *y = new double[NUM_SAMPLES];
-    read_data(x, y);
+    read_data(x, y, NUM_SAMPLES);
     double seconds = 0.0;
     for (int i = 0; i < NUM_SAMPLES; i++)
     {
