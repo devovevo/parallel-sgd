@@ -1,6 +1,7 @@
 #include "data.hpp"
 
-double generateData(int x) {
+double generateData(int x)
+{
     return sin(x) * sin(x);
 }
 

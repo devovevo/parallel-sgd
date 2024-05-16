@@ -1,8 +1,13 @@
+#include <iostream>
+#include <fstream>
 
 #include <cblas.h>
-#include "common.hpp"
+
+#include <chrono>
+using namespace std::chrono;
+
 #include "activations.h"
-#include "data.hpp"
+#include "common.h"
 
 void mlp_forward(mlp_t *mlp, double *x)
 {
@@ -11,7 +16,7 @@ void mlp_forward(mlp_t *mlp, double *x)
     for (int i = 0; i < mlp->num_layers - 1; i++)
     {
         // h_{i + 1} = W_{h_i} h_{i}
-        cblas_dgemv(CblasRowMajor, CblasNoTrans, mlp->layer_sizes[i + 1], mlp->layer_sizes[i], 1.0, mlp->weights[i], mlp->layer_sizes[i], mlp->layers[i], 1, 0.0, mlp->layers[i + 1], 1);
+        cblas_dgemv(CblasColMajor, CblasNoTrans, mlp->layer_sizes[i + 1], mlp->layer_sizes[i], 1.0, mlp->weights[i], mlp->layer_sizes[i + 1], mlp->layers[i], 1, 0.0, mlp->layers[i + 1], 1);
         // h_{i + 1} += b_{i}
         cblas_daxpy(mlp->layer_sizes[i + 1], 1.0, mlp->biases[i], 1, mlp->layers[i + 1], 1);
         // h_{i + 1} = sigmoid(h_{i + 1})
@@ -36,13 +41,13 @@ void mlp_backprop(mlp_t *mlp, double *y, double alpha)
         hadamard_product(mlp->deltas[i + 1], mlp->layers[i + 1], mlp->deltas[i + 1], mlp->layer_sizes[i + 1]);
 
         // W_i -= alpha * delta_{i + 1} h_i^T
-        cblas_dger(CblasRowMajor, mlp->layer_sizes[i + 1], mlp->layer_sizes[i], -1.0 * alpha, mlp->deltas[i + 1], 1, mlp->layers[i], 1, mlp->weights[i], mlp->layer_sizes[i]);
+        cblas_dger(CblasColMajor, mlp->layer_sizes[i + 1], mlp->layer_sizes[i], -1.0 * alpha, mlp->deltas[i + 1], 1, mlp->layers[i], 1, mlp->weights[i], mlp->layer_sizes[i + 1]);
 
         // b_i -= alpha * delta_{i + 1}
         cblas_daxpy(mlp->layer_sizes[i + 1], -1.0 * alpha, mlp->deltas[i + 1], 1, mlp->biases[i], 1);
 
-        // delta_{i - 1} = W_i^T delta_{i + 1}
-        cblas_dgemv(CblasRowMajor, CblasTrans, mlp->layer_sizes[i + 1], mlp->layer_sizes[i], 1.0, mlp->weights[i], mlp->layer_sizes[i], mlp->deltas[i + 1], 1, 0.0, mlp->deltas[i], 1);
+        // delta_{i} = W_i^T delta_{i + 1}
+        cblas_dgemv(CblasColMajor, CblasTrans, mlp->layer_sizes[i + 1], mlp->layer_sizes[i], 1.0, mlp->weights[i], mlp->layer_sizes[i + 1], mlp->deltas[i + 1], 1, 0.0, mlp->deltas[i], 1);
     }
 }
 
@@ -51,38 +56,29 @@ int main()
     int num_layers = 5;
     int layers[] = {1, 8, 8, 8, 1};
 
-    fun_t activations[] = {relu, relu, relu, identity};
-    fun_t d_activations[] = {d_relu, d_relu, d_relu, d_identity};
+    fun_t activations[] = {sigmoid, sigmoid, sigmoid, sigmoid};
+    fun_t d_activations[] = {d_sigmoid, d_sigmoid, d_sigmoid, d_sigmoid};
 
     mlp_t *mlp = create_mlp(num_layers, layers, activations, d_activations);
 
-    /*std::random_device rd;
-    std::mt19937 gen(rd());
-    std::normal_distribution<double> dist(0, 1);*/
-    double *x = new double[NUM_SAMPLES];
-    double *y = new double[NUM_SAMPLES];
-    read_data(x, y, NUM_SAMPLES);
-    double seconds = 0.0;
-    for (int i = 0; i < NUM_SAMPLES; i++)
+    for (int k = 0; k < 10000; k++)
     {
-        mlp_forward(mlp, &x[i]);
+        for (int i = 0; i < 100; i++)
+        {
+            double x = (double)i / 100;
+            double y = sin(M_PI * x) * sin(M_PI * x);
 
-        auto start_time = std::chrono::steady_clock::now();
-        mlp_backprop(mlp, &y[i], 0.0001);
-        auto end_time = std::chrono::steady_clock::now();
-        std::chrono::duration<double> diff = end_time - start_time;
-        seconds += diff.count();
-    }
-    std::cerr << "Serial training took " << seconds << " seconds." << std::endl;
-    /*std::ofstream file("data.csv");
-    read_data(x, y);
-    for (int i = 0; i < NUM_SAMPLES; i++)
-    {
-        mlp_forward(mlp, &x[i]);
-        file << x[i] << "," << y[i] << "," << mlp->layers[mlp->num_layers - 1][0] << std::endl;
+            mlp_forward(mlp, &x);
+            mlp_backprop(mlp, &y, 0.5);
+        }
     }
 
-    file.close();*/
+    for (int i = 0; i < 100; i++)
+    {
+        double x = (double)i / 100;
+        mlp_forward(mlp, &x);
+        fprintf(stderr, "%f %f %f\n", x, sin(M_PI * x) * sin(M_PI * x), mlp->layers[num_layers - 1][0]);
+    }
 
     delete_mlp(mlp);
 }

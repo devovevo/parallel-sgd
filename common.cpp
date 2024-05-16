@@ -27,11 +27,21 @@ void print_vector(double *v, int n)
 {
     for (int i = 0; i < n; i++)
     {
-        printf("%f ", v[i]);
+        printf("%f\n", v[i]);
     }
-    printf("\n");
 }
 
+void print_matrix(double *m, int rows, int cols)
+{
+    for (int i = 0; i < rows; i++)
+    {
+        for (int j = 0; j < cols; j++)
+        {
+            printf("%f ", m[i + j * rows]);
+        }
+        printf("\n");
+    }
+}
 
 mlp_t *create_mlp(int num_layers, int *layers, fun_t *activations, fun_t *d_activations)
 {
@@ -59,13 +69,42 @@ mlp_t *create_mlp(int num_layers, int *layers, fun_t *activations, fun_t *d_acti
             mlp->biases[i] = rand_vector(layers[i + 1]);
         }
 
-        mlp->layers[i] = (double *)malloc(layers[i] * sizeof(double));
-        mlp->deltas[i] = (double *)malloc(layers[i] * sizeof(double));
+        mlp->layers[i] = (double *)aligned_alloc(64, layers[i] * sizeof(double));
+        mlp->deltas[i] = (double *)aligned_alloc(64, layers[i] * sizeof(double));
     }
 
     return mlp;
 }
 
+void print_mlp(mlp_t *mlp)
+{
+    fprintf(stderr, "Input:\n");
+    print_vector(mlp->layers[0], mlp->layer_sizes[0]);
+
+    for (int i = 1; i < mlp->num_layers - 1; i++)
+    {
+        fprintf(stderr, "Hidden %d:\n", i);
+        print_vector(mlp->layers[i], mlp->layer_sizes[i]);
+    }
+
+    fprintf(stderr, "Output:\n");
+    print_vector(mlp->layers[mlp->num_layers - 1], mlp->layer_sizes[mlp->num_layers - 1]);
+
+    for (int i = 0; i < mlp->num_layers - 1; i++)
+    {
+        fprintf(stderr, "Weights %d:\n", i);
+        print_matrix(mlp->weights[i], mlp->layer_sizes[i + 1], mlp->layer_sizes[i]);
+
+        fprintf(stderr, "Biases %d:\n", i);
+        print_vector(mlp->biases[i], mlp->layer_sizes[i + 1]);
+
+        fprintf(stderr, "Deltas %d:\n", i);
+        print_vector(mlp->deltas[i], mlp->layer_sizes[i]);
+    }
+
+    fprintf(stderr, "Final Delta:\n");
+    print_vector(mlp->deltas[mlp->num_layers - 1], mlp->layer_sizes[mlp->num_layers - 1]);
+}
 
 void delete_mlp(mlp_t *mlp)
 {
@@ -90,35 +129,4 @@ void delete_mlp(mlp_t *mlp)
     free(mlp->deltas);
 
     free(mlp);
-}
-
-
-void print_mlp(mlp_t *mlp)
-{
-    fprintf(stderr, "Input:\n");
-    print_vector(mlp->layers[0], mlp->layer_sizes[0]);
-
-    for (int i = 1; i < mlp->num_layers - 1; i++)
-    {
-        fprintf(stderr, "Hidden %d:\n", i);
-        print_vector(mlp->layers[i], mlp->layer_sizes[i]);
-    }
-
-    fprintf(stderr, "Output:\n");
-    print_vector(mlp->layers[mlp->num_layers - 1], mlp->layer_sizes[mlp->num_layers - 1]);
-
-    for (int i = 0; i < mlp->num_layers - 1; i++)
-    {
-        fprintf(stderr, "Weights %d:\n", i);
-        print_vector(mlp->weights[i], mlp->layer_sizes[i] * mlp->layer_sizes[i + 1]);
-
-        fprintf(stderr, "Biases %d:\n", i);
-        print_vector(mlp->biases[i], mlp->layer_sizes[i + 1]);
-
-        fprintf(stderr, "Deltas %d:\n", i);
-        print_vector(mlp->deltas[i], mlp->layer_sizes[i]);
-    }
-
-    fprintf(stderr, "Final Delta:\n");
-    print_vector(mlp->deltas[mlp->num_layers - 1], mlp->layer_sizes[mlp->num_layers - 1]);
 }
