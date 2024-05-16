@@ -1,0 +1,13 @@
+#!/bin/bash
+#SBATCH -N 8
+#SBATCH -C cpu
+#SBATCH -q debug
+#SBATCH -J allreducetest
+#SBATCH --ntasks-per-node=64
+#SBATCH -t 00:10:00
+
+#modules
+# module load openmpi
+
+#run the application:
+srun ./all_reduce

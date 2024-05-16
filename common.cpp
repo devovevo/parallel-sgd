@@ -1,4 +1,4 @@
-#include "common.h"
+#include "common.hpp"
 
 void hadamard_product(double *a, double *b, double *c, int n)
 {
@@ -31,6 +31,7 @@ void print_vector(double *v, int n)
     }
     printf("\n");
 }
+
 
 mlp_t *create_mlp(int num_layers, int *layers, fun_t *activations, fun_t *d_activations)
 {

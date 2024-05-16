@@ -17,5 +17,8 @@ if (NOT "${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
             "module swap ${Prg-${CMAKE_C_COMPILER_ID}} PrgEnv-gnu")
 endif ()
 
-add_executable(sync_param sync_param_mlp.cpp common.cpp common.h activations.h)
-target_link_libraries(sync_param PRIVATE MPI::MPI_CXX ${BLAS_LIBRARIES})
+add_executable(serial serial_mlp.cpp common.cpp common.hpp activations.h data.cpp data.hpp)
+target_link_libraries(serial PRIVATE ${BLAS_LIBRARIES})
+
+add_executable(all_reduce sync_param_mlp.cpp common.cpp common.hpp activations.h data.cpp data.hpp)
+target_link_libraries(all_reduce PRIVATE MPI::MPI_CXX ${BLAS_LIBRARIES})
