@@ -10,6 +10,10 @@
 #include <algorithm>
 #include <random>
 
+#include <chrono>
+using namespace std::chrono;
+
+#include "utilities.h"
 #include "activations.h"
 
 typedef double (*fun_t)(double);
@@ -28,37 +32,6 @@ typedef struct mlp
     double **layers;
     double **deltas;
 } mlp_t;
-
-void hadamard_product(double *a, double *b, double *c, int n)
-{
-    for (int i = 0; i < n; i++)
-    {
-        c[i] = a[i] * b[i];
-    }
-}
-
-double *rand_vector(int n)
-{
-    double *v = (double *)malloc(n * sizeof(double));
-
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::normal_distribution<double> dist(0, 1);
-
-    std::generate(v, v + n, [&]()
-                  { return dist(gen); });
-
-    return v;
-}
-
-void print_vector(double *v, int n)
-{
-    for (int i = 0; i < n; i++)
-    {
-        printf("%f ", v[i]);
-    }
-    printf("\n");
-}
 
 mlp_t *create_mlp(int num_layers, int *layers, fun_t *activations, fun_t *d_activations)
 {
@@ -86,8 +59,8 @@ mlp_t *create_mlp(int num_layers, int *layers, fun_t *activations, fun_t *d_acti
             mlp->biases[i] = rand_vector(layers[i + 1]);
         }
 
-        mlp->layers[i] = (double *)malloc(layers[i] * sizeof(double));
-        mlp->deltas[i] = (double *)malloc(layers[i] * sizeof(double));
+        mlp->layers[i] = (double *)aligned_alloc(64, layers[i] * sizeof(double));
+        mlp->deltas[i] = (double *)aligned_alloc(64, layers[i] * sizeof(double));
     }
 
     return mlp;
@@ -100,7 +73,7 @@ void mlp_forward(mlp_t *mlp, double *x)
     for (int i = 0; i < mlp->num_layers - 1; i++)
     {
         // h_{i + 1} = W_{h_i} h_{i}
-        cblas_dgemv(CblasRowMajor, CblasNoTrans, mlp->layer_sizes[i + 1], mlp->layer_sizes[i], 1.0, mlp->weights[i], mlp->layer_sizes[i], mlp->layers[i], 1, 0.0, mlp->layers[i + 1], 1);
+        cblas_dgemv(CblasColMajor, CblasNoTrans, mlp->layer_sizes[i + 1], mlp->layer_sizes[i], 1.0, mlp->weights[i], mlp->layer_sizes[i + 1], mlp->layers[i], 1, 0.0, mlp->layers[i + 1], 1);
         // h_{i + 1} += b_{i}
         cblas_daxpy(mlp->layer_sizes[i + 1], 1.0, mlp->biases[i], 1, mlp->layers[i + 1], 1);
         // h_{i + 1} = sigmoid(h_{i + 1})
@@ -122,16 +95,16 @@ void mlp_backprop(mlp_t *mlp, double *y, double alpha)
         // We overwrite our previous output with the derivative of activation applied to it
         std::transform(mlp->layers[i + 1], mlp->layers[i + 1] + mlp->layer_sizes[i + 1], mlp->layers[i + 1], mlp->d_activations[i]);
         // delta_{i + 1} = delta_{i + 1} * d_activation(h_{i + 1})
-        hadamard_product(mlp->deltas[i + 1], mlp->layers[i + 1], mlp->deltas[i + 1], mlp->layer_sizes[i + 1]);
+        hadamard(mlp->deltas[i + 1], mlp->layers[i + 1], mlp->deltas[i + 1], mlp->layer_sizes[i + 1]);
 
         // W_i -= alpha * delta_{i + 1} h_i^T
-        cblas_dger(CblasRowMajor, mlp->layer_sizes[i + 1], mlp->layer_sizes[i], -1.0 * alpha, mlp->deltas[i + 1], 1, mlp->layers[i], 1, mlp->weights[i], mlp->layer_sizes[i]);
+        cblas_dger(CblasColMajor, mlp->layer_sizes[i + 1], mlp->layer_sizes[i], -1.0 * alpha, mlp->deltas[i + 1], 1, mlp->layers[i], 1, mlp->weights[i], mlp->layer_sizes[i + 1]);
 
         // b_i -= alpha * delta_{i + 1}
         cblas_daxpy(mlp->layer_sizes[i + 1], -1.0 * alpha, mlp->deltas[i + 1], 1, mlp->biases[i], 1);
 
-        // delta_{i - 1} = W_i^T delta_{i + 1}
-        cblas_dgemv(CblasRowMajor, CblasTrans, mlp->layer_sizes[i + 1], mlp->layer_sizes[i], 1.0, mlp->weights[i], mlp->layer_sizes[i], mlp->deltas[i + 1], 1, 0.0, mlp->deltas[i], 1);
+        // delta_{i} = W_i^T delta_{i + 1}
+        cblas_dgemv(CblasColMajor, CblasTrans, mlp->layer_sizes[i + 1], mlp->layer_sizes[i], 1.0, mlp->weights[i], mlp->layer_sizes[i + 1], mlp->deltas[i + 1], 1, 0.0, mlp->deltas[i], 1);
     }
 }
 
@@ -177,7 +150,7 @@ void print_mlp(mlp_t *mlp)
     for (int i = 0; i < mlp->num_layers - 1; i++)
     {
         fprintf(stderr, "Weights %d:\n", i);
-        print_vector(mlp->weights[i], mlp->layer_sizes[i] * mlp->layer_sizes[i + 1]);
+        print_matrix(mlp->weights[i], mlp->layer_sizes[i + 1], mlp->layer_sizes[i]);
 
         fprintf(stderr, "Biases %d:\n", i);
         print_vector(mlp->biases[i], mlp->layer_sizes[i + 1]);
@@ -195,36 +168,29 @@ int main()
     int num_layers = 5;
     int layers[] = {1, 8, 8, 8, 1};
 
-    fun_t activations[] = {relu, relu, relu, identity};
-    fun_t d_activations[] = {d_relu, d_relu, d_relu, d_identity};
+    fun_t activations[] = {sigmoid, sigmoid, sigmoid, sigmoid};
+    fun_t d_activations[] = {d_sigmoid, d_sigmoid, d_sigmoid, d_sigmoid};
 
     mlp_t *mlp = create_mlp(num_layers, layers, activations, d_activations);
 
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::normal_distribution<double> dist(0, 1);
-
-    for (int i = 0; i < 5000; i++)
+    for (int k = 0; k < 10000; k++)
     {
-        double x = dist(gen);
-        double y = sin(x) * sin(x);
+        for (int i = 0; i < 100; i++)
+        {
+            double x = (double)i / 100;
+            double y = sin(M_PI * x) * sin(M_PI * x);
 
-        mlp_forward(mlp, &x);
-        mlp_backprop(mlp, &y, 0.0001);
+            mlp_forward(mlp, &x);
+            mlp_backprop(mlp, &y, 0.5);
+        }
     }
 
-    std::ofstream file("data.csv");
-
-    for (int i = 0; i < 1000; i++)
+    for (int i = 0; i < 100; i++)
     {
-        double x = dist(gen);
-        double y = sin(x) * sin(x);
-
+        double x = (double)i / 100;
         mlp_forward(mlp, &x);
-        file << x << "," << y << "," << mlp->layers[mlp->num_layers - 1][0] << std::endl;
+        fprintf(stderr, "%f %f %f\n", x, sin(M_PI * x) * sin(M_PI * x), mlp->layers[num_layers - 1][0]);
     }
-
-    file.close();
 
     delete_mlp(mlp);
 }
