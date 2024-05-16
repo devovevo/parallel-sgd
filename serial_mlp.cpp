@@ -14,14 +14,6 @@
 
 typedef double (*fun_t)(double);
 
-void hadamard_product(double *a, double *b, double *c, int n)
-{
-    for (int i = 0; i < n; i++)
-    {
-        c[i] = a[i] * b[i];
-    }
-}
-
 typedef struct mlp
 {
     int num_layers;
@@ -37,17 +29,24 @@ typedef struct mlp
     double **deltas;
 } mlp_t;
 
+void hadamard_product(double *a, double *b, double *c, int n)
+{
+    for (int i = 0; i < n; i++)
+    {
+        c[i] = a[i] * b[i];
+    }
+}
+
 double *rand_vector(int n)
 {
     double *v = (double *)malloc(n * sizeof(double));
+
     std::random_device rd;
     std::mt19937 gen(rd());
     std::normal_distribution<double> dist(0, 1);
 
-    for (int i = 0; i < n; i++)
-    {
-        v[i] = dist(gen);
-    }
+    std::generate(v, v + n, [&]()
+                  { return dist(gen); });
 
     return v;
 }
@@ -212,8 +211,6 @@ int main()
 
         mlp_forward(mlp, &x);
         mlp_backprop(mlp, &y, 0.0001);
-
-        print_mlp(mlp);
     }
 
     std::ofstream file("data.csv");
